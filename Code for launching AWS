@@ -1,1 +1,58 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat May  1 22:38:09 2021
 
+@author: esrhgmg
+"""
+
+import sys
+import boto3
+import os
+req_module_present = False
+try:
+    import requests
+except importError:
+    Print("Please create SG for AWS using IP, default SG will be used and you will able to do ssh in your linux system")
+else:
+    req_module_presnt = True
+# list of all instances
+def list_all_instances():
+    print("list of all instances")
+    ec2 = boto3.resource('ec2')
+    for instance in ec2.instances.all():
+        print("\ninstance Id : ",instance.id,"\state : ",instance.state,"\nLocation : ",instance.placement['Availabilityzone'],
+              "\nIP : ", instance.public_ip_address)
+#list specific instances
+def list_instances(instance_id):
+    print("List instances with id", instance_id)
+    ec2 = boto3.resource('ec2')
+    for instance in ec2.instances.all():
+        if instance.id == instance.id:
+            print("\nInstance ID : ",instance.id, 
+                  "\nState : ", instance.state,
+                  "\nLocation : ", instance.placement['AvailabilityZone'], 
+                  "\nIP : ", instance.public_ip_address)
+# create new instance
+def create_instance(sec_group_id,keyname):
+    print("Create new instance")
+    try:
+        ec2 = boto3.resource('ec2')
+        instances = ec2.create_instances(ImageId='ami-f63b1193', 
+                                        MinCount=1, 
+                                        MaxCount=1, 
+                                        InstanceType='t2.micro', 
+                                        KeyName = str(keyname),
+                                        SecurityGroupIds = [sec_group_id])
+        instances = instances[0]
+        print(" new instances created \n Instance ID: ",instance.id)
+    except: 
+        print("something went wrong...exit it \n more details:",sys.exc.info())
+        sys.exit()
+    print("instance created successfully")
+    print(" waiting for instance to change to state from pending to running")
+    instance.wait_until_running()
+#reloads instance
+    instance.load()
+    print("instance is running")
+    print("dns:",instance.public_dns_name)
+    return(instance.id, instance.public_dns_name)   
