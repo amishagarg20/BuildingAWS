@@ -13,7 +13,7 @@ def terminate_instance():
     for instance_id_i in sys.argv[1:]:
         instance = ec2.Instance(instance_id_i)
         response = instance.terminate()
-        print("shutting down instance..termination in progress")
+        print("shutting down EC2 instance..termination in progress")
         instance.wait_until_terminated()
         print("\nInstance Terminated:\n",response)
 
