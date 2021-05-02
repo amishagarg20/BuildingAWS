@@ -11,8 +11,8 @@ import os
 req_module_present = False
 try:
     import requests
-except importError:
-    Print("Please create SG for AWS using IP, default SG will be used and you will able to do ssh in your linux system")
+except ImportError:
+    print("Please create SG for AWS using IP, default SG will be used and you will able to do ssh in your linux system")
 else:
     req_module_presnt = True
 # list of all instances
@@ -37,14 +37,14 @@ def create_instance(sec_group_id,keyname):
     print("Create new instance")
     try:
         ec2 = boto3.resource('ec2')
-        instances = ec2.create_instances(ImageId='ami-f63b1193', 
+        instances = ec2.create_instances(ImageId='ami-048f6ed62451373d9', 
                                         MinCount=1, 
                                         MaxCount=1, 
                                         InstanceType='t2.micro', 
                                         KeyName = str(keyname),
                                         SecurityGroupIds = [sec_group_id])
-        instances = instances[0]
-        print(" new instances created \n Instance ID: ",instance.id)
+        instance = instances[0]
+        print("\nNew Instance Created\nInstance ID : ",instance.id)
     except: 
         print("something went wrong...exit it \n more details:",sys.exc.info())
         sys.exit()
@@ -55,4 +55,117 @@ def create_instance(sec_group_id,keyname):
     instance.load()
     print("instance is running")
     print("dns:",instance.public_dns_name)
-    return(instance.id, instance.public_dns_name)   
+    return(instance.id, instance.public_dns_name)    
+# create a key
+def create_key(keyname):
+    print("create a new keypair for instance")
+    if check_key_pair_exists(keyname):
+        return str(keyname)
+    try:
+        ec2 = boto3.resource('ec2')
+        filename= str(str(keyname)+'.pem')
+# make sure file doesnot exist locally
+        try:
+            os.remove(filename)
+        except OSError:
+            pass
+        outfile = open(filename, 'w')
+        key_pair = ec2.create_key_pair(KeyName=str(keyname))
+        keyPairOut = str(key_pair.key_material)
+        outfile.write(keyPairOut)
+        os.chmod(filename,0o400)
+    except:
+        print("something went wron....exit it \n more details:",sys.exc_info())
+        
+    else:
+        print("key created successfully: "+str(keyname)+".pem")
+    return str(keyname)
+#check if key-pair already exists in aws
+def check_key_pair_exists(keyname):
+    ec2_client = boto3.client('ec2')
+    try:
+        desc_key_pair = ec2_client.describe_key_pairs(KeyNames=[keyname])
+    except:
+        return False
+    else:
+        if(len(desc_key_pair)>0):
+            print("key pair named",keyname,"already exists, using the same")
+            return True
+        else:
+            return False
+        #check if security group already exists
+def check_sec_group_exists(group_name):
+    ec2_client = boto3.client("ec2")
+    try:
+        desc_sec_groups = ec2_client.describe_security_groups(GroupNames=[group_name])
+    except:
+        return (ec2_client,False)
+    else:
+        if(len(desc_sec_groups)>0):
+            print("security group already exists", desc_sec_groups['SecurityGroups'][0]['GroupId'])
+            return (ec2_client,desc_sec_groups['SecurityGroups'][0]['GroupId'])
+        else:
+            return (ec2_client,False)
+#create security group
+def create_security_group():
+    #to avoid group already exists error, delete already existing security group with same name
+    ec2_client,group_id = check_sec_group_exists('myfirstsg')
+    
+    if group_id:
+        return group_id;
+    
+    #else do the following: create new sec group, and ingress rules for ssh, and return group id
+    response = ec2_client.create_security_group(
+        Description='myfirstsg for ssh only',
+        GroupName='myfirstsg',
+    )
+    sg_id = response['GroupId']
+    sg_desc = "myfirstsg for ssh only"
+
+    old_ip = "127.0.0.1"
+    current_ip = requests.get('http://ip.42.pl/raw').text
+    try:
+        ec2 = boto3.resource("ec2")
+        security_group = ec2.SecurityGroup(sg_id)
+
+        for p in security_group.ip_permissions:
+            for r in p['IpRanges']:
+                if 'Description' in r and r['Description'] == sg_desc:
+                    old_ip = r['CidrIp']
+                    print("found old IP :",old_ip)
+                else:
+                    print("can't find old IP")
+
+        if old_ip != "127.0.0.1":
+            security_group.revoke_ingress(IpProtocol="tcp", CidrIp=old_ip, FromPort=22, ToPort=22)
+            print("remove of old IP",old_ip)
+
+        perms = {
+            'IpProtocol': "tcp",
+            'FromPort': 22,
+            'ToPort': 22,
+            'IpRanges': [{'CidrIp': current_ip+"/32", 'Description': sg_desc}]
+        }  
+        security_group.authorize_ingress(IpPermissions=[perms])
+        print("updated with "+ current_ip +"/32")
+    except:
+        print("security group function: something went wrong...\n more details",sys.exc_info()[0])
+        print("exiting program") 
+        sys.exit()
+    print("security group successfully created with id:",sg_id)
+    return sg_id
+#main execution
+if __name__ == '__main__':
+    list_all_instances()
+    keyname = create_key('myfirstkey')
+    if req_module_present:
+        sec_group_id = create_security_group()
+    else:
+        sec_group_id = 'default'
+    instance_id,instance_dns_name = create_instance(sec_group_id,keyname)
+    list_instances(instance_id)
+    print("you can successfully ssh as per the security group added")
+    print("ssh -i "+str(keyname)+".pem ec2-user@"+str(instance_dns_name))
+    print("please use the following command to terminate the instance after you are done using the instance(very important)")
+    print("python3 terminate_instances.py "+str(instance_id))
+    
